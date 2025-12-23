@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="sq">
+<head>
+<meta charset="UTF-8">
+<title>POS Market – FINAL ABSOLUT (perditesuar)</title>
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+
+<style>
+body{margin:0;font-family:Segoe UI;background:#eef2f7}
+header{background:#1e293b;color:#fff;padding:15px}
+nav button{margin:4px;padding:10px;border:none;border-radius:10px;background:#334155;color:#fff}
+section{display:none;padding:15px}
+section.active{display:block}
+.card{background:#fff;padding:15px;border-radius:14px;margin-bottom:12px;box-shadow:0 8px 18px rgba(0,0,0,.1)}
+input,button,select{padding:8px;border-radius:8px;border:1px solid #cbd5f5}
+button{background:#2563eb;color:#fff;font-weight:600;margin:3px}
+table{width:100%;border-collapse:collapse;margin-top:10px}
+th,td{padding:6px;border-bottom:1px solid #e5e7eb;text-align:center}
+th{background:#f1f5f9}
+.admin{display:none}
+.qtyBtn{padding:4px 8px}
+.modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:999}
+.modal-content{background:#fff;margin:60px auto;padding:15px;width:95%;max-width:520px;border-radius:14px}
+.small{font-size:0.9em;color:#374151}
+.kv{font-weight:600}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+.col{flex:1;min-width:120px}
+#scanner{width:100%;background:#000;border-radius:8px;overflow:hidden}
+</style>
+
+<script src="https://unpkg.com/@ericblade/quagga2/dist/quagga.js"></script>
+</head>
+<body>
+
+<header>
+<h2>🛒 POS Market</h2>
+<nav id="menu" style="display:none">
+<button onclick="openSec('prod')" class="admin">Stok</button>
+<button onclick="openSec('sale')">Shitje</button>
+<button onclick="openSec('bil')" class="admin">Bilanc</button>
+<button onclick="openSec('hist')">Historik</button>
+<button onclick="logout()">Dil</button>
+</nav>
+</header>
+
+<!-- LOGIN -->
+<section id="loginSec" class="active">
+<div class="card">
+<h3>Login</h3>
+<input id="u" placeholder="User">
+<input id="p" type="password">
+<button onclick="doLogin()">Hyr</button>
+<p id="msg" style="color:red"></p>
+</div>
+</section>
+
+<!-- STOK -->
+<section id="prod">
+<div class="card admin">
+<h3>Shto Produkt</h3>
+<div class="row">
+  <input id="pn" placeholder="Emri" class="col">
+  <input id="pb" placeholder="Barkodi" class="col">
+</div>
+<div class="row" style="margin-top:8px">
+  <input id="pp" type="number" placeholder="Çmimi" class="col">
+  <input id="ps" type="number" placeholder="Sasia" class="col">
+</div>
+<div style="margin-top:8px">
+  <button onclick="addProduct()">➕ Shto</button>
+  <button onclick="openCam('stock','environment')">📷 Mbrapa</button>
+  <button onclick="openCam('stock','user')">🤳 Para</button>
+</div>
+</div>
+<table id="prodTable"></table>
+</section>
+
+<!-- SHITJE -->
+<section id="sale">
+<div class="card">
+<div class="row">
+  <input id="saleScan" placeholder="Emër / Barkod / Scan USB" autofocus class="col">
+  <input id="client" placeholder="Emri i klientit (opsional)" class="col">
+</div>
+<div style="margin-top:8px">
+  <button onclick="manualAdd()">➕ Shto</button>
+  <button onclick="openCam('sale','environment')">📷 Mbrapa</button>
+  <button onclick="openCam('sale','user')">🤳 Para</button>
+</div>
+</div>
+
+<div class="card">
+<table id="saleTable"></table>
+<h3>Total: <span id="tot">0</span> ALL</h3>
+<input id="paid" type="number" placeholder="Lekë nga klienti">
+<h3>Kusur / Mungesë: <span id="change">0</span></h3>
+<button onclick="pay()">Paguaj</button>
+<button onclick="cancel()">Anulo</button>
+</div>
+</section>
+
+<!-- BILANC -->
+<section id="bil" class="admin">
+<div class="card">
+<h3>Bilanci Ditor</h3>
+<p>Sistemi: <b><span id="daily">0</span> ALL</b></p>
+<p class="small">(Kjo është shuma e parave të arkëtuara gjatë ditës)</p>
+<input id="cashReal" type="number" placeholder="Shuma reale në arkë">
+<p>Diferenca: <b><span id="diff">0</span></b></p>
+<button onclick="closeDay()">Mbyll Ditën</button>
+</div>
+</section>
+
+<!-- HISTORIK -->
+<section id="hist">
+<div class="card">
+<h3>Historiku i Shitjeve</h3>
+<div style="margin-bottom:8px">
+  <button onclick="exportCSV()">⬇️ Eksporto CSV</button>
+  <button onclick="clearOld()">🧹 Fshi të gjitha (lokal)</button>
+</div>
+<table id="histTable"></table>
+</div>
+</section>
+
+<!-- CAMERA -->
+<div class="modal" id="cam">
+<div class="modal-content">
+<h3>Scan Barcode</h3>
+<div id="scanner" style="height:260px"></div>
+<button id="camCloseBtn">Mbyll</button>
+</div>
+</div>
+
+<!-- VIEW / PAY DEBT MODAL -->
+<div class="modal" id="viewModal">
+<div class="modal-content" id="viewContent">
+<h3>Detajet e Shitjes</h3>
+<div id="viewBody"></div>
+<div style="margin-top:12px">
+  <input id="settleAmount" type="number" placeholder="Shuma për të shlyer (ALL)">
+  <button onclick="settleDebt()">Shlyej Borxh</button>
+  <button onclick="closeView()">Mbyll</button>
+</div>
+</div>
+</div>
+
+<script>
+/* USERS */
+const users=[{u:'admin',p:'admin',r:'admin'},{u:'kasier',p:'kasier',r:'kasier'}];
+let role=null, scanTarget=null, scanLock=false, camMode='environment';
+let quaggaHandler = null;
+let quaggaRunning = false;
+
+let products=JSON.parse(localStorage.getItem('p')||'[]');
+let sales=[]; // current basket
+let salesHistory=JSON.parse(localStorage.getItem('salesHistory')||'[]');
+let daily=+localStorage.getItem('daily')||0;
+
+/* LOGIN */
+function doLogin(){
+  let f=users.find(x=>x.u===u.value&&x.p===p.value);
+  if(!f)return msg.textContent='Gabim login';
+  role=f.r;
+  loginSec.style.display='none';
+  menu.style.display='block';
+  document.querySelectorAll('.admin').forEach(e=>e.style.display=role==='admin'?'block':'none');
+  openSec('sale'); renderProducts(); updateDaily(); renderHistory();
+}
+function logout(){location.reload();}
+function openSec(id){
+  document.querySelectorAll('section').forEach(s=>s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+/* STOK */
+function addProduct(){
+  products.push({n:pn.value||'Pa emër',b:pb.value||'',p:+pp.value||0,s:+ps.value||0});
+  store();
+  pn.value=pb.value=pp.value=ps.value='';
+  renderProducts();
+}
+function renderProducts(){
+  prodTable.innerHTML='<tr><th>Emër</th><th>Barkod</th><th>Çmim</th><th>Stok</th><th>❌</th></tr>';
+  products.forEach((p,i)=>{
+    prodTable.innerHTML+=`
+    <tr>
+      <td><input value="${escapeHtml(p.n)}" onchange="products[${i}].n=this.value;store()"></td>
+      <td><input value="${escapeHtml(p.b)}" onchange="products[${i}].b=this.value;store()"></td>
+      <td><input type="number" value="${p.p}" onchange="products[${i}].p=+this.value;store()"></td>
+      <td><input type="number" value="${p.s}" onchange="products[${i}].s=+this.value;store()"></td>
+      <td><button onclick="products.splice(${i},1);store();renderProducts()">🗑️</button></td>
+    </tr>`;
+  });
+}
+
+/* SHITJE */
+function addToSale(p){
+  if(p.s<1)return alert('Stoku = 0');
+  let s=sales.find(x=>x.b===p.b);
+  if(s){ if(s.q+1>p.s)return alert('Sasia tejkalon stoqen'); s.q++; }
+  else sales.push({b:p.b,n:p.n,p:p.p,q:1});
+  drawSale();
+}
+function manualAdd(){
+  let v=saleScan.value.trim().toLowerCase();
+  if(!v) return;
+  let p=products.find(x=>x.b===v||x.n.toLowerCase().includes(v));
+  if(!p)return alert('Nuk u gjet');
+  addToSale(p); saleScan.value='';
+}
+saleScan.addEventListener('keydown',e=>{if(e.key==='Enter')manualAdd();});
+
+/* SHITJE + LLOGARITJE */
+function drawSale(){
+  saleTable.innerHTML='<tr><th>Produkt</th><th>Sasi</th><th>Çmim</th><th>Total</th><th></th></tr>';
+  sales.forEach((x,i)=>{
+    saleTable.innerHTML+=`
+    <tr>
+      <td>${escapeHtml(x.n)}</td>
+      <td>
+        <button class="qtyBtn" onclick="changeQty(${i},-1)">➖</button>
+        ${x.q}
+        <button class="qtyBtn" onclick="changeQty(${i},1)">➕</button>
+      </td>
+      <td>${x.p}</td>
+      <td>${x.q*x.p}</td>
+      <td><button onclick="sales.splice(${i},1);drawSale()">🗑️</button></td>
+    </tr>`;
+  });
+  recalc();
+}
+function changeQty(i,delta){
+  const item = sales[i];
+  if(!item) return;
+  const prod = products.find(p=>p.b===item.b);
+  item.q += delta;
+  if(item.q < 1) { sales.splice(i,1); }
+  if(prod && item.q > prod.s){ item.q = prod.s; alert('Sasia tejkalon stoqen'); }
+  drawSale();
+}
+function recalc(){
+  let total=0; sales.forEach(x=>total+=x.q*x.p);
+  tot.textContent=total;
+  let cash = (+paid.value||0);
+  let diff = cash - total;
+  if(diff < 0){
+    change.textContent = `Mungojnë ${Math.abs(diff)} ALL`;
+    change.style.color='red';
+  } else {
+    change.textContent = `Kusur ${diff} ALL`;
+    change.style.color='green';
+  }
+}
+paid.addEventListener('input',recalc);
+
+/* 📷 CAMERA PARA / MBRAPA */
+document.getElementById('camCloseBtn').addEventListener('click', stopCam);
+
+function openCam(target,mode){
+  scanTarget=target;
+  camMode=mode;
+  scanLock=false;
+  cam.style.display='block';
+
+  if(quaggaHandler && Quagga && Quagga.offDetected){
+    try{ Quagga.offDetected(quaggaHandler); }catch(e){}
+    quaggaHandler = null;
+  }
+
+  Quagga.init({
+    inputStream:{
+      type:"LiveStream",
+      target:document.querySelector('#scanner'),
+      constraints:{
+        facingMode:{ ideal: camMode },
+        width:{ ideal:640 },
+        height:{ ideal:480 }
+      }
+    },
+    locator:{patchSize:"medium",halfSample:true},
+    decoder:{readers:["ean_reader","ean_8_reader","code_128_reader","upc_reader"]},
+    locate:true
+  },err=>{
+    if(err){ alert("Kamera nuk u hap (HTTPS / leje): " + (err.message||err)); cam.style.display='none'; return; }
+    try{ Quagga.start(); quaggaRunning = true; }catch(e){ alert("Gabim duke nisur kamerën: "+e.message); cam.style.display='none'; return; }
+  });
+
+  quaggaHandler = function(d){
+    if(scanLock) return;
+    scanLock=true;
+    let code = d && d.codeResult && d.codeResult.code;
+    if(!code) { scanLock=false; return; }
+    if(scanTarget==='stock') pb.value = code;
+    if(scanTarget==='sale'){
+      let p = products.find(x=>x.b===code);
+      if(p) addToSale(p);
+      else alert('Barkodi nuk u gjet: ' + code);
+    }
+    setTimeout(stopCam,400);
+  };
+  Quagga.onDetected(quaggaHandler);
+}
+
+function stopCam(){
+  if(quaggaHandler && Quagga && Quagga.offDetected){
+    try{ Quagga.offDetected(quaggaHandler); }catch(e){}
+    quaggaHandler = null;
+  }
+  if(Quagga && quaggaRunning){
+    try{ Quagga.stop(); }catch(e){}
+    quaggaRunning = false;
+  }
+  cam.style.display='none';
+  scanLock = false;
+}
+
+/* PAGESA & BILANC */
+function pay(){
+  let total = +tot.textContent || 0;
+  let cash = +paid.value || 0;
+  if(sales.length===0) return alert('Shporta është bosh');
+
+  const clientName = (client.value||'').trim();
+
+  let status = cash >= total ? 'paid' : 'owed';
+  let changeAmount = Math.max(0, cash - total);
+  let due = Math.max(0, total - cash);
+
+  // Update stock
+  for(let item of sales){
+    let prod = products.find(p=>p.b===item.b);
+    if(prod) prod.s = Math.max(0, prod.s - item.q);
+  }
+
+  const timestamp = new Date().toISOString();
+  const record = {
+    id: timestamp + '_' + Math.random().toString(36).slice(2,7),
+    timestamp,
+    client: clientName || null,
+    items: JSON.parse(JSON.stringify(sales)),
+    total,
+    amountPaid: cash,
+    change: changeAmount,
+    due,
+    status
+  };
+  salesHistory.unshift(record);
+  localStorage.setItem('salesHistory', JSON.stringify(salesHistory));
+
+  daily += record.amountPaid;
+  localStorage.setItem('daily', daily);
+
+  store(); cancel(); updateDaily(); renderHistory();
+
+  if(status==='paid') alert('Shitja u krye. Kusur: ' + changeAmount + ' ALL');
+  else alert('Shitja u regjistrua si BORXH. Mungojnë: ' + due + ' ALL (Paguat: ' + cash + ' ALL)');
+}
+
+function cancel(){
+  sales=[]; saleTable.innerHTML='';
+  tot.textContent=0; paid.value=''; change.textContent=0; client.value='';
+}
+
+/* HISTORIK */
+function renderHistory(){
+  histTable.innerHTML = '<tr><th>Data</th><th>Klient</th><th>Total</th><th>Paguar</th><th>Mbetje</th><th>Status</th><th>Veprime</th></tr>';
+  salesHistory.forEach(rec=>{
+    histTable.innerHTML += `<tr>
+      <td>${rec.timestamp.replace('T',' ').slice(0,19)}</td>
+      <td>${escapeHtml(rec.client||'--')}</td>
+      <td>${rec.total}</td>
+      <td>${rec.amountPaid}</td>
+      <td>${rec.due}</td>
+      <td>${rec.status}</td>
+      <td>
+        <button onclick='viewSale("${rec.id}")'>Shiko</button>
+        <button onclick='deleteSale("${rec.id}")'>🗑️</button>
+      </td>
+    </tr>`;
+  });
+}
+function viewSale(id){
+  const r = salesHistory.find(x=>x.id===id);
+  if(!r) return alert('Nuk u gjet shitja');
+  const body = document.getElementById('viewBody');
+  let html = `<p><b>Data:</b> ${r.timestamp.replace('T',' ').slice(0,19)}</p>`;
+  html += `<p><b>Klient:</b> ${escapeHtml(r.client||'--')}</p>`;
+  html += `<p><b>Total:</b> ${r.total} ALL</p>`;
+  html += `<p><b>Paguar:</b> ${r.amountPaid} ALL</p>`;
+  html += `<p><b>Mbetje:</b> ${r.due} ALL</p>`;
+  html += `<p><b>Status:</b> ${r.status}</p>`;
+  html += '<hr><p><b>Produkte:</b></p><ul>';
+  r.items.forEach(it=> html += `<li>${escapeHtml(it.n)} x${it.q} = ${it.q*it.p} ALL</li>`);
+  html += '</ul>';
+  body.innerHTML = html;
+  // store current viewed id on modal
+  viewModal.dataset.currentId = id;
+  // Pre-fill settle amount with due
+  settleAmount.value = r.due || '';
+  viewModal.style.display='block';
+}
+
+function closeView(){
+  viewModal.style.display='none';
+  delete viewModal.dataset.currentId;
+}
+
+function deleteSale(id){
+  if(!confirm('Fshi këtë regjistrim?')) return;
+  salesHistory = salesHistory.filter(x=>x.id!==id);
+  localStorage.setItem('salesHistory', JSON.stringify(salesHistory));
+  renderHistory();
+}
+
+/* SHLYERJE BORXHI */
+function settleDebt(){
+  const id = viewModal.dataset.currentId;
+  if(!id) return alert('Nuk ka shitje të zgjedhur');
+  const r = salesHistory.find(x=>x.id===id);
+  if(!r) return alert('Nuk u gjet shitja');
+  let amt = +settleAmount.value || 0;
+  if(amt <= 0) return alert('Shuma duhet > 0');
+  if(r.due <= 0) return alert('Nuk ka borxh për këtë shitje');
+
+  const payNow = Math.min(amt, r.due);
+  r.amountPaid += payNow;
+  r.due -= payNow;
+  if(r.due <= 0) { r.status = 'paid'; r.due = 0; }
+  else r.status = 'owed';
+
+  // Update daily with collected amount
+  daily += payNow;
+  localStorage.setItem('daily', daily);
+
+  localStorage.setItem('salesHistory', JSON.stringify(salesHistory));
+  updateDaily(); renderHistory(); viewSale(id); // re-open modal with updated values
+  alert('U faturua shuma: ' + payNow + ' ALL');
+}
+
+/* EXPORT CSV */
+function exportCSV(){
+  if(!salesHistory.length) return alert('Nuk ka të dhëna për eksport');
+  const rows = [];
+  const header = ['id','timestamp','client','total','amountPaid','due','status','items'];
+  rows.push(header.join(','));
+  salesHistory.slice().reverse().forEach(r=>{
+    const itemsText = r.items.map(i=>`${i.n} x${i.q}=${i.q*i.p}`).join(' | ');
+    const row = [
+      `"${r.id}"`,
+      `"${r.timestamp}"`,
+      `"${(r.client||'')}"`,
+      r.total,
+      r.amountPaid,
+      r.due,
+      r.status,
+      `"${itemsText}"`
+    ];
+    rows.push(row.join(','));
+  });
+  const csv = rows.join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'sales_history.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+/* CLEAR ALL (lokal) */
+function clearOld(){
+  if(!confirm('Je i sigurt? Kjo do fshij historikun lokal.')) return;
+  salesHistory = [];
+  localStorage.removeItem('salesHistory');
+  renderHistory();
+}
+
+/* BILANCI / MBYLL DITA */
+function updateDaily(){ dailyEl.textContent = daily; }
+cashReal.addEventListener('input',()=>{
+  let d=(+cashReal.value||0)-daily;
+  diff.textContent=d+' ALL'; diff.style.color=d<0?'red':'green';
+});
+function closeDay(){
+  const sys = daily;
+  const arka = +cashReal.value || 0;
+  const diffv = arka - sys;
+  alert(`Sistemi (duhet në arkë): ${sys} ALL\nArka (me dore): ${arka} ALL\nDiferenca: ${diffv} ALL`);
+  localStorage.setItem('dayClosures', JSON.stringify((JSON.parse(localStorage.getItem('dayClosures')||'[]')).concat([{timestamp:new Date().toISOString(), system:sys, cash:arka, diff:diffv}])));
+  daily = 0; localStorage.setItem('daily',0);
+  cashReal.value=''; updateDaily(); diff.textContent=0;
+}
+
+/* UTIL */
+function store(){ localStorage.setItem('p',JSON.stringify(products)); renderProducts(); }
+const dailyEl=document.getElementById('daily');
+
+/* helper */
+function escapeHtml(str){ return (''+str).replace(/[&<>"']/g, s=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s])); }
+
+renderProducts();
+renderHistory();
+updateDaily();
+</script>
+
+</body>
+</html>
